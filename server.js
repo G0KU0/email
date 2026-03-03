@@ -56,7 +56,7 @@ app.post('/api/register', async (req, res) => {
         const newUser = new User({
             username,
             password: hashedPassword,
-            emailAddress: teljesEmail
+            emailAddress: `${username}@${domain}`
         });
 
         await newUser.save();
