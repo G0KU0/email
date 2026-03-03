@@ -1,115 +1,84 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="hu">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SzabyMail | Mailisk Pro</title>
+    <title>SzabyMail | Pro</title>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
-        body { background: #f6f8fc; height: 100vh; display: flex; overflow: hidden; }
-        
-        /* AUTH SECTION */
+        body { background: #f6f8fc; display: flex; height: 100vh; }
         #auth-screen { position: fixed; inset: 0; background: white; z-index: 1000; display: flex; align-items: center; justify-content: center; }
-        .auth-card { background: #f0f4f9; padding: 40px; border-radius: 24px; width: 350px; text-align: center; }
-        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #747775; border-radius: 8px; }
-        .btn { width: 100%; padding: 12px; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-blue { background: #0b57d0; color: white; margin-top: 10px; }
-        
-        /* APP SECTION */
+        .card { background: #f0f4f9; padding: 40px; border-radius: 24px; width: 350px; text-align: center; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #ccc; }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; background: #0b57d0; color: white; margin-top: 10px; }
         #app-screen { display: none; width: 100%; display: flex; }
-        .sidebar { width: 250px; padding: 20px; display: flex; flex-direction: column; }
-        .compose { background: #c2e7ff; padding: 16px 24px; border-radius: 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
-        .nav-item { display: flex; align-items: center; gap: 15px; padding: 10px 20px; border-radius: 20px; cursor: pointer; color: #444; }
-        .nav-item.active { background: #d3e3fd; color: #041e49; font-weight: bold; }
-
-        .main { flex: 1; background: white; margin: 15px; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .sidebar { width: 250px; padding: 20px; }
+        .main { flex: 1; background: white; margin: 15px; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
         .header { padding: 15px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
-        .email-list { flex: 1; overflow-y: auto; }
-        .email-item { display: flex; align-items: center; padding: 12px 20px; border-bottom: 1px solid #f1f1f1; cursor: pointer; }
-        .email-item:hover { background: #f8f9fa; box-shadow: inset 2px 0 0 #0b57d0; }
+        .email-item { padding: 15px 20px; border-bottom: 1px solid #f1f1f1; cursor: pointer; display: flex; align-items: center; }
+        .email-item:hover { background: #f8f9fa; }
         .sender { width: 180px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .subject { flex: 1; color: #555; }
     </style>
 </head>
 <body>
 
     <div id="auth-screen">
-        <div class="auth-card">
+        <div class="card">
             <h1 style="color:#0b57d0; margin-bottom:20px">SzabyMail</h1>
-            <input type="text" id="user" placeholder="Felhasználónév">
-            <input type="password" id="pass" placeholder="Jelszó">
-            <button class="btn btn-blue" onclick="auth('/api/login')">Bejelentkezés</button>
-            <button class="btn" style="background:none; color:#555" onclick="auth('/api/register')">Fiók létrehozása</button>
+            <input type="text" id="u" placeholder="Felhasználónév">
+            <input type="password" id="p" placeholder="Jelszó">
+            <button class="btn" onclick="handle('login')">Bejelentkezés</button>
+            <button class="btn" style="background:none; color:#555" onclick="handle('register')">Regisztráció</button>
         </div>
     </div>
 
     <div id="app-screen">
         <div class="sidebar">
-            <div class="compose"><span class="material-icons">edit</span> Írás</div>
-            <div class="nav-item active"><span class="material-icons">inbox</span> Beérkező</div>
-            <div class="nav-item" onclick="location.reload()" style="margin-top:auto"><span class="material-icons">logout</span> Kilépés</div>
+            <div style="background:#c2e7ff; padding:15px; border-radius:16px; margin-bottom:20px; font-weight:bold; text-align:center">Írás</div>
+            <div style="background:#d3e3fd; padding:10px 20px; border-radius:20px; font-weight:bold">Beérkező</div>
         </div>
         <div class="main">
             <div class="header">
-                <span id="my-email" style="font-weight: bold; color: #0b57d0;">Betöltés...</span>
-                <span class="material-icons" style="cursor:pointer" onclick="loadEmails()">refresh</span>
+                <span id="email-addr" style="font-weight:bold; color:#0b57d0"></span>
+                <span class="material-icons" style="cursor:pointer" onclick="load()">refresh</span>
             </div>
-            <div class="email-list" id="list">
-                <p style="padding: 20px">Levelek keresése...</p>
-            </div>
+            <div id="list" style="overflow-y:auto"></div>
         </div>
     </div>
 
     <script>
         let token = "";
-
-        async function auth(url) {
-            const u = document.getElementById('user').value;
-            const p = document.getElementById('pass').value;
-            try {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username: u, password: p})
-                });
-                const data = await res.json();
-                if(data.token) {
+        async function handle(type) {
+            const res = await fetch('/api/' + type, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: document.getElementById('u').value, password: document.getElementById('p').value})
+            });
+            const data = await res.json();
+            if(data.token || data.message) {
+                if(type === 'login') {
                     token = data.token;
-                    document.getElementById('my-email').innerText = data.email;
+                    document.getElementById('email-addr').innerText = data.email;
                     document.getElementById('auth-screen').style.display = 'none';
                     document.getElementById('app-screen').style.display = 'flex';
-                    loadEmails();
-                } else { alert(data.error || "Hiba történt"); }
-            } catch(e) { alert("Szerver hiba!"); }
+                    load();
+                } else alert("Sikeres regisztráció! Most lépj be.");
+            } else alert(data.error);
         }
 
-        async function loadEmails() {
-            const listDiv = document.getElementById('list');
-            listDiv.innerHTML = "<p style='padding:20px'>Frissítés...</p>";
-            
-            try {
-                const res = await fetch('/api/inbox', { headers: {'Authorization': token} });
-                if(!res.ok) throw new Error("Sikertelen lekérés");
-                
-                const emails = await res.json();
-                if(emails.length === 0) {
-                    listDiv.innerHTML = "<p style='padding:20px; color:#666'>A postaláda üres.</p>";
-                    return;
-                }
-
-                listDiv.innerHTML = "";
-                emails.forEach(e => {
-                    listDiv.innerHTML += `
-                        <div class="email-item">
-                            <span class="material-icons" style="color:#ccc; margin-right:15px">star_outline</span>
-                            <div class="sender">${e.from}</div>
-                            <div class="subject"><b>${e.subject}</b> - ${e.body.substring(0, 50)}...</div>
-                        </div>`;
-                });
-            } catch(err) {
-                listDiv.innerHTML = `<p style='padding:20px; color:red'>Hiba: ${err.message}</p>`;
-            }
+        async function load() {
+            const list = document.getElementById('list');
+            list.innerHTML = "<p style='padding:20px'>Frissítés...</p>";
+            const res = await fetch('/api/inbox', { headers: {'Authorization': token} });
+            const emails = await res.json();
+            list.innerHTML = emails.length ? "" : "<p style='padding:20px'>Üres a postaláda.</p>";
+            emails.forEach(e => {
+                list.innerHTML += `
+                    <div class="email-item">
+                        <div class="sender">${e.from}</div>
+                        <div style="flex:1"><b>${e.subject}</b> - ${e.body.substring(0, 50)}...</div>
+                    </div>`;
+            });
         }
     </script>
 </body>
