@@ -3,19 +3,23 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const path = require('path');
+const { Resend } = require('resend');
 require('dotenv').config();
 
 const app = express();
+const resend = new Resend(process.env.RESEND_API_KEY || 're_K1DJHynN_JKJ73ULXEa4DEjZA7HjnV3MD');
+
 app.use(express.json());
 app.use(cors());
 
-// EZ JAVÍTJA A "CANNOT GET /" HIBÁT:
-app.use(express.static('public')); 
+// --- FONTOS: Statikus fájlok kiszolgálása ---
+app.use(express.static(path.join(__dirname, 'public')));
 
 // --- ADATBÁZIS MODELLEK ---
 const User = mongoose.model('User', new mongoose.Schema({
-    username: { type: String, unique: true, required: true },
-    password: { type: String, required: true },
+    username: { type: String, unique: true },
+    password: { type: String },
     emailAddress: { type: String, unique: true }
 }));
 
@@ -27,68 +31,75 @@ const Email = mongoose.model('Email', new mongoose.Schema({
     receivedAt: { type: Date, default: Date.now }
 }));
 
-// MongoDB csatlakozás
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("Adatbázis csatlakozva!"))
-    .catch(err => console.error("MongoDB hiba:", err));
+mongoose.connect(process.env.MONGO_URI).then(() => console.log("MongoDB Kapcsolat OK"));
 
-// --- ÚTVONALAK ---
+// --- API ÚTVONALAK ---
 
-// Regisztráció - JAVÍTOTT KUKAC JEL:
+// Regisztráció (Javított kukac kezelés)
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
+        const domain = process.env.DOMAIN_NAME || 'szabymail.run.place';
         
-        // Itt adjuk hozzá a @ jelet automatikusan
-        const teljesEmail = `${username}@${process.env.DOMAIN_NAME}`;
-
         const newUser = new User({
             username,
             password: hashedPassword,
-            emailAddress: teljesEmail
+            emailAddress: `${username}@${domain}`
         });
 
         await newUser.save();
-        res.status(201).json({ message: "Sikeres regisztráció!", email: teljesEmail });
-    } catch (e) { 
-        res.status(400).json({ error: "Ez a felhasználónév már foglalt!" }); 
-    }
+        res.status(201).json({ message: "Sikeres regisztráció!" });
+    } catch (e) { res.status(400).json({ error: "Hiba: A név már foglalt." }); }
 });
 
 // Belépés
 app.post('/api/login', async (req, res) => {
-    const { username, password } = req.body;
-    const user = await User.findOne({ username });
-    if (user && await bcrypt.compare(password, user.password)) {
+    const user = await User.findOne({ username: req.body.username });
+    if (user && await bcrypt.compare(req.body.password, user.password)) {
         const token = jwt.sign({ email: user.emailAddress }, process.env.JWT_SECRET);
         res.json({ token, email: user.emailAddress });
-    } else { 
-        res.status(401).json({ error: "Hibás adatok!" }); 
-    }
+    } else { res.status(401).json({ error: "Hibás adatok!" }); }
 });
 
-// WEBHOOK (Ide küldi a levelet a postás/továbbító)
-app.post('/api/webhook/incoming', async (req, res) => {
-    const { from, to, subject, body } = req.body;
-    const newEmail = new Email({ from, to, subject, body });
-    await newEmail.save();
-    console.log(`Új levél érkezett: ${to}`);
-    res.status(200).send("OK");
-});
-
-// Inbox lekérése
-app.get('/api/inbox', async (req, res) => {
+// Küldés (Resend)
+app.post('/api/send', async (req, res) => {
     const token = req.headers['authorization'];
-    if (!token) return res.status(401).send("Nincs belépve");
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const emails = await Email.find({ to: decoded.email }).sort({ receivedAt: -1 });
-        res.json(emails);
-    } catch (e) { 
-        res.status(403).send("Lejárt munkamenet"); 
-    }
+        const { to, subject, body } = req.body;
+        
+        await resend.emails.send({
+            from: `SzabyMail <mail@${process.env.DOMAIN_NAME}>`,
+            to: [to],
+            subject: subject,
+            html: `<p><strong>Feladó: ${decoded.email}</strong></p><p>${body}</p>`
+        });
+        res.json({ message: "Levél elküldve!" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Szerver fut a ${PORT} porton!`));
+// Fogadás (Webhook)
+app.post('/api/webhook/incoming', async (req, res) => {
+    const { from, to, subject, text } = req.body;
+    const newEmail = new Email({ from, to, subject, body: text });
+    await newEmail.save();
+    res.sendStatus(200);
+});
+
+// Inbox lekérés
+app.get('/api/inbox', async (req, res) => {
+    const token = req.headers['authorization'];
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const emails = await Email.find({ to: decoded.email }).sort('-receivedAt');
+        res.json(emails);
+    } catch (e) { res.status(401).send("Hiba"); }
+});
+
+// Minden egyéb kérésre az index.html-t adjuk (Javítja a fehér oldalt)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(process.env.PORT || 3000, () => console.log("Szerver elindult"));
