@@ -5,60 +5,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SzabyMail</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: white; display: flex; justify-content: center; padding: 20px; }
-        .card { background: #1e1e1e; padding: 30px; border-radius: 15px; width: 100%; max-width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: none; background: #333; color: white; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.3s; margin-top: 10px; }
-        .btn-blue { background: #007bff; color: white; }
-        .btn-green { background: #28a745; color: white; }
-        .email-item { background: #2a2a2a; padding: 15px; margin-top: 15px; border-radius: 8px; border-left: 4px solid #007bff; }
-        #inbox-view { display: none; }
+        body { font-family: sans-serif; background: #1a1a1a; color: white; display: flex; justify-content: center; padding: 20px; }
+        .card { background: #252525; padding: 25px; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #444; background: #333; color: white; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        .primary { background: #007bff; color: white; }
+        .secondary { background: #28a745; color: white; }
+        .email { background: #333; padding: 12px; margin-top: 10px; border-radius: 6px; border-left: 3px solid #007bff; }
+        #view-inbox { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="card" id="auth-view">
-        <h1 style="text-align:center;">SzabyMail</h1>
-        <input type="text" id="user" placeholder="Felhasználónév">
-        <input type="password" id="pass" placeholder="Jelszó">
-        <button class="btn-blue" onclick="auth('/api/login')">BELÉPÉS</button>
-        <button class="btn-green" onclick="auth('/api/register')">REGISZTRÁCIÓ</button>
+    <div class="card" id="view-auth">
+        <h1 style="text-align:center;">SzabyMail @</h1>
+        <input type="text" id="u" placeholder="Felhasználónév (pl: szaby)">
+        <input type="password" id="p" placeholder="Jelszó">
+        <button class="primary" onclick="doAuth('/api/login')">BELÉPÉS</button>
+        <button class="secondary" onclick="doAuth('/api/register')">REGISZTRÁCIÓ</button>
     </div>
 
-    <div class="card" id="inbox-view">
-        <h2>Szia, <span id="my-addr" style="color:#007bff;"></span>!</h2>
-        <button onclick="fetchInbox()" style="background:#555; color:white;">FRISSÍTÉS</button>
+    <div class="card" id="view-inbox">
+        <h2 id="addr-display"></h2>
+        <button onclick="load()" style="background:#444; color:white;">FRISSÍTÉS</button>
         <div id="list"></div>
-        <button onclick="location.reload()" style="background:red; color:white; margin-top:30px;">KIJELENTKEZÉS</button>
+        <button onclick="location.reload()" style="background:#c0392b; color:white; margin-top:20px;">KIJELENTKEZÉS</button>
     </div>
 
     <script>
-        let myToken = "";
-
-        async function auth(url) {
-            const res = await fetch(url, {
+        let token = "";
+        async function doAuth(url) {
+            const r = await fetch(url, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: document.getElementById('user').value, password: document.getElementById('pass').value})
+                body: JSON.stringify({username: document.getElementById('u').value, password: document.getElementById('p').value})
             });
-            const data = await res.json();
-            if(data.token) {
-                myToken = data.token;
-                document.getElementById('my-addr').innerText = data.email;
-                document.getElementById('auth-view').style.display = 'none';
-                document.getElementById('inbox-view').style.display = 'block';
-                fetchInbox();
-            } else { alert(data.message || data.error); }
+            const d = await r.json();
+            if(d.token) {
+                token = d.token;
+                document.getElementById('addr-display').innerText = d.email;
+                document.getElementById('view-auth').style.display = 'none';
+                document.getElementById('view-inbox').style.display = 'block';
+                load();
+            } else { alert(d.message || d.error); }
         }
 
-        async function fetchInbox() {
-            const res = await fetch('/api/inbox', { headers: {'Authorization': myToken} });
-            const emails = await res.json();
-            const container = document.getElementById('list');
-            container.innerHTML = emails.length ? "" : "<p>Nincs még üzeneted.</p>";
+        async function load() {
+            const r = await fetch('/api/inbox', { headers: {'Authorization': token} });
+            const emails = await r.json();
+            const list = document.getElementById('list');
+            list.innerHTML = emails.length ? "" : "Nincs levél.";
             emails.forEach(e => {
-                container.innerHTML += `<div class="email-item">
-                    <small>Kitől: ${e.from}</small><br>
+                list.innerHTML += `<div class="email">
+                    <small>Feladó: ${e.from}</small><br>
                     <strong>${e.subject}</strong>
                     <p>${e.body}</p>
                 </div>`;
