@@ -2,120 +2,83 @@ const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const cors = require('cors');
 const path = require('path');
-const { Resend } = require('resend');
+const cors = require('cors');
+// A beépített fetch-et használjuk (Node.js 18+ esetén)
 require('dotenv').config();
 
 const app = express();
-const resend = new Resend(process.env.RESEND_API_KEY || 're_K1DJHynN_JKJ73ULXEa4DEjZA7HjnV3MD');
-
 app.use(express.json());
 app.use(cors());
-
-// Statikus fájlok kiszolgálása a 'public' mappából
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ADATBÁZIS MODELLEK
+// --- MAILISK ADATOK ---
+const MAILISK_API_KEY = 'sk_KAnVXCrADIF1qYWJsP7Ao823pWsO99dQbVbD9ROP2RQ';
+const MAILISK_NAMESPACE = 'e34tx612tpip'; // A megadott azonosítód
+
+mongoose.connect(process.env.MONGO_URI);
+
 const User = mongoose.model('User', new mongoose.Schema({
-    username: { type: String, unique: true, required: true },
-    password: { type: String, required: true },
-    emailAddress: { type: String, unique: true }
+    username: String, password: String, emailAddress: String
 }));
 
-const Email = mongoose.model('Email', new mongoose.Schema({
-    from: String,
-    to: String,
-    subject: String,
-    body: String,
-    receivedAt: { type: Date, default: Date.now }
-}));
-
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log(">>> MongoDB: Kapcsolat él!"))
-    .catch(err => console.error("!!! MongoDB Hiba:", err));
-
-// --- API ÚTVONALAK ---
-
-// Regisztráció (@ javítva)
+// REGISZTRÁCIÓ (Most már a mailisk-es címeddel)
 app.post('/api/register', async (req, res) => {
     try {
-        const { username, password } = req.body;
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const domain = process.env.DOMAIN_NAME || 'szabymail.run.place';
-        
-        const newUser = new User({
-            username,
+        const hashedPassword = await bcrypt.hash(req.body.password, 10);
+        const user = new User({
+            username: req.body.username,
             password: hashedPassword,
-            emailAddress: `${username}@${domain}`
+            // Mindenki kap egy al-címet a te mailisk tartományodon belül
+            emailAddress: `${req.body.username}@${MAILISK_NAMESPACE}.mailisk.net`
         });
-
-        await newUser.save();
-        res.status(201).json({ message: "Sikeres regisztráció!" });
-    } catch (e) {
-        console.error(e);
-        res.status(400).json({ error: "Ez a név vagy email már foglalt!" });
-    }
+        await user.save();
+        res.json({ message: "Sikeres regisztráció!" });
+    } catch (e) { res.status(400).send("Hiba"); }
 });
 
-// Belépés
+// BELÉPÉS
 app.post('/api/login', async (req, res) => {
-    const { username, password } = req.body;
-    const user = await User.findOne({ username });
-    if (user && await bcrypt.compare(password, user.password)) {
-        const token = jwt.sign({ email: user.emailAddress }, process.env.JWT_SECRET);
+    const user = await User.findOne({ username: req.body.username });
+    if (user && await bcrypt.compare(req.body.password, user.password)) {
+        const token = jwt.sign({ email: user.emailAddress }, process.env.JWT_SECRET || 'titok');
         res.json({ token, email: user.emailAddress });
-    } else {
-        res.status(401).json({ error: "Hibás adatok!" });
-    }
+    } else res.status(401).send("Hiba");
 });
 
-// Küldés (Resend)
-app.post('/api/send', async (req, res) => {
-    const token = req.headers['authorization'];
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const { to, subject, body } = req.body;
-        
-        await resend.emails.send({
-            from: `SzabyMail <mail@${process.env.DOMAIN_NAME}>`,
-            to: [to],
-            subject: subject,
-            html: `<p><strong>Feladó: ${decoded.email}</strong></p><p>${body}</p>`
-        });
-        res.json({ message: "Levél elküldve!" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Inbox (Levelek lekérése)
+// INBOX LEKÉRÉSE (Most a Mailisk-től kérdezzük le!)
 app.get('/api/inbox', async (req, res) => {
     const token = req.headers['authorization'];
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const emails = await Email.find({ to: decoded.email }).sort('-receivedAt');
-        res.json(emails);
-    } catch (e) { res.status(401).send("Hiba"); }
-});
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'titok');
+        const targetEmail = decoded.email;
 
-// Webhook (Levelek fogadása a Resend-től)
-app.post('/api/webhook/incoming', async (req, res) => {
-    try {
-        const { from, to, subject, text, html } = req.body;
-        const newEmail = new Email({ 
-            from, 
-            to, 
-            subject: subject || "(Nincs tárgy)", 
-            body: text || html || "" 
+        // Lekérjük a leveleket a Mailisk API-tól
+        const response = await fetch(`https://api.mailisk.com/api/emails?namespace=${MAILISK_NAMESPACE}`, {
+            headers: { 'X-Api-Key': MAILISK_API_KEY }
         });
-        await newEmail.save();
-        res.sendStatus(200);
-    } catch (e) { res.sendStatus(500); }
+        const data = await response.json();
+
+        // Csak azokat a leveleket mutatjuk, amiknek a címzettje a belépett felhasználó
+        const myEmails = data.emails.filter(email => 
+            email.to.some(recipient => recipient.address === targetEmail)
+        );
+
+        // Átalakítjuk a formátumot, hogy a frontend megértse
+        const formattedEmails = myEmails.map(e => ({
+            from: e.from[0].address,
+            subject: e.subject,
+            body: e.text || e.html,
+            receivedAt: e.date
+        }));
+
+        res.json(formattedEmails);
+    } catch (e) { 
+        console.error(e);
+        res.status(403).send("Hiba"); 
+    }
 });
 
-// Catch-all: bármi másra az index.html-t adjuk
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Szerver fut a ${PORT} porton!`));
+app.listen(process.env.PORT || 3000, () => console.log("Mailisk szerver fut!"));
