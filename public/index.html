@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SzabyMail</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: white; display: flex; justify-content: center; padding: 20px; }
+        .card { background: #1e1e1e; padding: 30px; border-radius: 15px; width: 100%; max-width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: none; background: #333; color: white; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.3s; margin-top: 10px; }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-green { background: #28a745; color: white; }
+        .email-item { background: #2a2a2a; padding: 15px; margin-top: 15px; border-radius: 8px; border-left: 4px solid #007bff; }
+        #inbox-view { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="card" id="auth-view">
+        <h1 style="text-align:center;">SzabyMail</h1>
+        <input type="text" id="user" placeholder="Felhasználónév">
+        <input type="password" id="pass" placeholder="Jelszó">
+        <button class="btn-blue" onclick="auth('/api/login')">BELÉPÉS</button>
+        <button class="btn-green" onclick="auth('/api/register')">REGISZTRÁCIÓ</button>
+    </div>
+
+    <div class="card" id="inbox-view">
+        <h2>Szia, <span id="my-addr" style="color:#007bff;"></span>!</h2>
+        <button onclick="fetchInbox()" style="background:#555; color:white;">FRISSÍTÉS</button>
+        <div id="list"></div>
+        <button onclick="location.reload()" style="background:red; color:white; margin-top:30px;">KIJELENTKEZÉS</button>
+    </div>
+
+    <script>
+        let myToken = "";
+
+        async function auth(url) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: document.getElementById('user').value, password: document.getElementById('pass').value})
+            });
+            const data = await res.json();
+            if(data.token) {
+                myToken = data.token;
+                document.getElementById('my-addr').innerText = data.email;
+                document.getElementById('auth-view').style.display = 'none';
+                document.getElementById('inbox-view').style.display = 'block';
+                fetchInbox();
+            } else { alert(data.message || data.error); }
+        }
+
+        async function fetchInbox() {
+            const res = await fetch('/api/inbox', { headers: {'Authorization': myToken} });
+            const emails = await res.json();
+            const container = document.getElementById('list');
+            container.innerHTML = emails.length ? "" : "<p>Nincs még üzeneted.</p>";
+            emails.forEach(e => {
+                container.innerHTML += `<div class="email-item">
+                    <small>Kitől: ${e.from}</small><br>
+                    <strong>${e.subject}</strong>
+                    <p>${e.body}</p>
+                </div>`;
+            });
+        }
+    </script>
+</body>
+</html>
