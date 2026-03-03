@@ -8,21 +8,15 @@ const { Resend } = require('resend');
 require('dotenv').config();
 
 const app = express();
-
-// --- KONFIGURÁCIÓ ---
-// A Resend API kulcsodat érdemes a Render felületén (Environment Variables) megadni RESEND_API_KEY néven!
 const resend = new Resend(process.env.RESEND_API_KEY || 're_K1DJHynN_JKJ73ULXEa4DEjZA7HjnV3MD');
-const JWT_SECRET = process.env.JWT_SECRET || 'titkos_kulcs_123';
-const DOMAIN = process.env.DOMAIN_NAME || 'szabymail.run.place';
 
 app.use(express.json());
 app.use(cors());
 
-// --- 1. JAVÍTÁS: STATIKUS FÁJLOK ÉS FŐOLDAL ---
-// Ez a rész gondoskodik róla, hogy a 'public' mappában lévő index.html megjelenjen
+// Statikus fájlok kiszolgálása a 'public' mappából
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- ADATBÁZIS MODELLEK ---
+// ADATBÁZIS MODELLEK
 const User = mongoose.model('User', new mongoose.Schema({
     username: { type: String, unique: true, required: true },
     password: { type: String, required: true },
@@ -37,22 +31,19 @@ const Email = mongoose.model('Email', new mongoose.Schema({
     receivedAt: { type: Date, default: Date.now }
 }));
 
-// MongoDB Csatlakozás
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log(">>> Sikeres MongoDB csatlakozás!"))
-    .catch(err => console.error("!!! MongoDB hiba:", err));
+    .then(() => console.log(">>> MongoDB: Kapcsolat él!"))
+    .catch(err => console.error("!!! MongoDB Hiba:", err));
 
 // --- API ÚTVONALAK ---
 
-// 2. JAVÍTÁS: REGISZTRÁCIÓ (KUKAC JEL AUTOMATIKUSAN)
+// Regisztráció (@ javítva)
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
+        const domain = process.env.DOMAIN_NAME || 'szabymail.run.place';
         
-        // Összeállítjuk a teljes e-mail címet a kukaccal
-        const teljesEmail = `${username}@${DOMAIN}`;
-
         const newUser = new User({
             username,
             password: hashedPassword,
@@ -60,94 +51,71 @@ app.post('/api/register', async (req, res) => {
         });
 
         await newUser.save();
-        res.status(201).json({ message: "Sikeres regisztráció!", email: teljesEmail });
+        res.status(201).json({ message: "Sikeres regisztráció!" });
     } catch (e) {
-        res.status(400).json({ error: "Ez a felhasználónév már foglalt!" });
+        console.error(e);
+        res.status(400).json({ error: "Ez a név vagy email már foglalt!" });
     }
 });
 
-// LOGIN
+// Belépés
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     const user = await User.findOne({ username });
-
     if (user && await bcrypt.compare(password, user.password)) {
-        const token = jwt.sign({ email: user.emailAddress }, JWT_SECRET);
+        const token = jwt.sign({ email: user.emailAddress }, process.env.JWT_SECRET);
         res.json({ token, email: user.emailAddress });
     } else {
-        res.status(401).json({ error: "Hibás felhasználónév vagy jelszó!" });
+        res.status(401).json({ error: "Hibás adatok!" });
     }
 });
 
-// LEVÉL KÜLDÉSE (Resend API használatával)
+// Küldés (Resend)
 app.post('/api/send', async (req, res) => {
     const token = req.headers['authorization'];
-    if (!token) return res.status(401).json({ error: "Nincs jogosultságod!" });
-
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const { to, subject, body } = req.body;
-
+        
         await resend.emails.send({
-            from: `SzabyMail <mail@${DOMAIN}>`, // A Resend-nek valid feladó kell
+            from: `SzabyMail <mail@${process.env.DOMAIN_NAME}>`,
             to: [to],
             subject: subject,
-            html: `<strong>Üzenet tőle: ${decoded.email}</strong><br><p>${body}</p>`
+            html: `<p><strong>Feladó: ${decoded.email}</strong></p><p>${body}</p>`
         });
-
-        res.json({ message: "Levél sikeresen elküldve!" });
-    } catch (error) {
-        res.status(500).json({ error: "Küldési hiba: " + error.message });
-    }
+        res.json({ message: "Levél elküldve!" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 3. JAVÍTÁS: WEBHOOK FOGADÁSA (RE-SEND INBOUND)
-// Ezt a végpontot hívja meg a Resend, ha levél érkezik neked
+// Inbox (Levelek lekérése)
+app.get('/api/inbox', async (req, res) => {
+    const token = req.headers['authorization'];
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const emails = await Email.find({ to: decoded.email }).sort('-receivedAt');
+        res.json(emails);
+    } catch (e) { res.status(401).send("Hiba"); }
+});
+
+// Webhook (Levelek fogadása a Resend-től)
 app.post('/api/webhook/incoming', async (req, res) => {
     try {
         const { from, to, subject, text, html } = req.body;
-
-        const newEmail = new Email({
-            from: from,
-            to: to,
-            subject: subject || "(Nincs tárgy)",
-            body: text || html || ""
+        const newEmail = new Email({ 
+            from, 
+            to, 
+            subject: subject || "(Nincs tárgy)", 
+            body: text || html || "" 
         });
-
         await newEmail.save();
-        console.log(`Új levél érkezett: ${to}`);
-        res.status(200).send("OK");
-    } catch (error) {
-        console.error("Webhook hiba:", error);
-        res.status(500).send("Hiba");
-    }
+        res.sendStatus(200);
+    } catch (e) { res.sendStatus(500); }
 });
 
-// INBOX LEKÉRÉSE
-app.get('/api/inbox', async (req, res) => {
-    const token = req.headers['authorization'];
-    if (!token) return res.status(401).send("Nincs token");
-
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const emails = await Email.find({ to: decoded.email }).sort({ receivedAt: -1 });
-        res.json(emails);
-    } catch (e) {
-        res.status(403).send("Hiba az azonosításnál");
-    }
-});
-
-// 4. JAVÍTÁS: CATCH-ALL ÚTVONAL
-// Bármilyen egyéb kérés esetén az index.html-t adjuk vissza
+// Catch-all: bármi másra az index.html-t adjuk
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Szerver indítása
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`-----------------------------------------`);
-    console.log(`Szerver elindult a ${PORT} porton!`);
-    console.log(`Domain: ${DOMAIN}`);
-    console.log(`-----------------------------------------`);
-});
+app.listen(PORT, () => console.log(`Szerver fut a ${PORT} porton!`));
