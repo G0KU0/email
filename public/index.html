@@ -3,151 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SzabyMail Professional</title>
+    <title>SzabyMail | Mailisk Pro</title>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Google Sans', Roboto, Arial, sans-serif; }
-        body { background-color: #f6f8fc; display: flex; height: 100vh; color: #1f1f1f; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body { background: #f6f8fc; height: 100vh; display: flex; overflow: hidden; }
         
-        /* LOGIN */
-        #auth-view { position: fixed; inset: 0; background: white; display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .auth-card { background: #f0f4f9; padding: 40px; border-radius: 28px; width: 400px; text-align: center; }
-        input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 12px; border: 1px solid #747775; background: white; font-size: 16px; }
-        .btn { padding: 12px 24px; border: none; border-radius: 100px; cursor: pointer; font-weight: 500; font-size: 14px; transition: 0.2s; }
-        .btn-primary { background: #0b57d0; color: white; margin-top: 15px; width: 100%; }
-        .btn-primary:hover { background: #0842a0; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        /* AUTH SECTION */
+        #auth-screen { position: fixed; inset: 0; background: white; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .auth-card { background: #f0f4f9; padding: 40px; border-radius: 24px; width: 350px; text-align: center; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #747775; border-radius: 8px; }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-blue { background: #0b57d0; color: white; margin-top: 10px; }
+        
+        /* APP SECTION */
+        #app-screen { display: none; width: 100%; display: flex; }
+        .sidebar { width: 250px; padding: 20px; display: flex; flex-direction: column; }
+        .compose { background: #c2e7ff; padding: 16px 24px; border-radius: 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
+        .nav-item { display: flex; align-items: center; gap: 15px; padding: 10px 20px; border-radius: 20px; cursor: pointer; color: #444; }
+        .nav-item.active { background: #d3e3fd; color: #041e49; font-weight: bold; }
 
-        /* APP LAYOUT */
-        #app-view { display: none; width: 100%; display: flex; }
-        .sidebar { width: 260px; padding: 16px; display: flex; flex-direction: column; }
-        .compose-btn { background: #c2e7ff; color: #001d35; padding: 16px 24px; border-radius: 16px; display: inline-flex; align-items: center; gap: 12px; cursor: pointer; font-weight: 500; margin-bottom: 16px; width: fit-content; transition: 0.3s; }
-        .compose-btn:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
-        .nav-link { display: flex; align-items: center; gap: 12px; padding: 10px 24px; border-radius: 100px; cursor: pointer; font-size: 14px; margin: 2px 0; color: #444746; }
-        .nav-link.active { background: #d3e3fd; color: #041e49; font-weight: 700; }
-        .nav-link:hover:not(.active) { background: #e1e3e1; }
-
-        .main { flex: 1; background: white; margin: 16px 16px 16px 0; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
-        .main-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f1f1; }
+        .main { flex: 1; background: white; margin: 15px; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .header { padding: 15px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
         .email-list { flex: 1; overflow-y: auto; }
-        .email-item { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid #f1f1f1; cursor: pointer; font-size: 14px; }
-        .email-item:hover { box-shadow: inset 1px 0 0 #dadce0, inset -1px 0 0 #dadce0, 0 1px 2px 0 rgba(60,64,67,.3); }
-        .sender { width: 200px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .subject { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .subject b { color: #1f1f1f; }
-        .subject span { color: #5f6368; }
-
-        /* MODAL */
-        .modal { display: none; position: fixed; bottom: 0; right: 80px; width: 520px; background: white; border-radius: 12px 12px 0 0; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 200; border: 1px solid #ccc; }
-        .modal-header { background: #f2f6fc; padding: 12px 16px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; font-size: 14px; font-weight: 500; }
-        .modal-body { padding: 16px; display: flex; flex-direction: column; }
-        .modal-body input { border: none; border-bottom: 1px solid #eee; border-radius: 0; padding: 8px 0; margin: 0; }
-        .modal-body textarea { border: none; outline: none; resize: none; margin-top: 10px; font-size: 14px; min-height: 200px; }
+        .email-item { display: flex; align-items: center; padding: 12px 20px; border-bottom: 1px solid #f1f1f1; cursor: pointer; }
+        .email-item:hover { background: #f8f9fa; box-shadow: inset 2px 0 0 #0b57d0; }
+        .sender { width: 180px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .subject { flex: 1; color: #555; }
     </style>
 </head>
 <body>
 
-    <div id="auth-view">
+    <div id="auth-screen">
         <div class="auth-card">
-            <h1 style="color:#0b57d0; margin-bottom:10px">SzabyMail</h1>
-            <p style="margin-bottom:20px; color:#5f6368">Folytatás a SzabyMail fiókkal</p>
-            <input type="text" id="username" placeholder="Felhasználónév">
-            <input type="password" id="password" placeholder="Jelszó">
-            <button class="btn btn-primary" onclick="handleAuth('/api/login')">Bejelentkezés</button>
-            <button class="btn" style="margin-top:10px; background:none; color:#0b57d0" onclick="handleAuth('/api/register')">Fiók létrehozása</button>
+            <h1 style="color:#0b57d0; margin-bottom:20px">SzabyMail</h1>
+            <input type="text" id="user" placeholder="Felhasználónév">
+            <input type="password" id="pass" placeholder="Jelszó">
+            <button class="btn btn-blue" onclick="auth('/api/login')">Bejelentkezés</button>
+            <button class="btn" style="background:none; color:#555" onclick="auth('/api/register')">Fiók létrehozása</button>
         </div>
     </div>
 
-    <div id="app-view" style="display: none;">
+    <div id="app-screen">
         <div class="sidebar">
-            <div class="compose-btn" onclick="openModal()">
-                <span class="material-icons">edit</span>
-                Írás
-            </div>
-            <div class="nav-link active"><span class="material-icons">inbox</span> Beérkező</div>
-            <div class="nav-link"><span class="material-icons">star_outline</span> Csillagozott</div>
-            <div class="nav-link"><span class="material-icons">send</span> Elküldött</div>
-            <div class="nav-link" style="margin-top:auto; color:#b3261e" onclick="location.reload()"><span class="material-icons">logout</span> Kijelentkezés</div>
+            <div class="compose"><span class="material-icons">edit</span> Írás</div>
+            <div class="nav-item active"><span class="material-icons">inbox</span> Beérkező</div>
+            <div class="nav-item" onclick="location.reload()" style="margin-top:auto"><span class="material-icons">logout</span> Kilépés</div>
         </div>
-
         <div class="main">
-            <div class="main-header">
-                <span id="user-email-display" style="font-weight: 500; color: #0b57d0;"></span>
-                <span class="material-icons" style="cursor:pointer; color:#5f6368" onclick="loadEmails()">refresh</span>
+            <div class="header">
+                <span id="my-email" style="font-weight: bold; color: #0b57d0;">Betöltés...</span>
+                <span class="material-icons" style="cursor:pointer" onclick="loadEmails()">refresh</span>
             </div>
-            <div class="email-list" id="email-list">
-                </div>
-        </div>
-    </div>
-
-    <div class="modal" id="compose-modal">
-        <div class="modal-header">
-            <span>Új üzenet</span>
-            <span class="material-icons" style="cursor:pointer" onclick="closeModal()">close</span>
-        </div>
-        <div class="modal-body">
-            <input type="text" id="to" placeholder="Címzett">
-            <input type="text" id="subject" placeholder="Tárgy">
-            <textarea id="body" placeholder="Üzenet..."></textarea>
-            <button class="btn btn-primary" style="width:100px" onclick="sendEmail()">Küldés</button>
+            <div class="email-list" id="list">
+                <p style="padding: 20px">Levelek keresése...</p>
+            </div>
         </div>
     </div>
 
     <script>
         let token = "";
 
-        async function handleAuth(url) {
-            const u = document.getElementById('username').value;
-            const p = document.getElementById('password').value;
-            if(!u || !p) return alert("Töltsd ki a mezőket!");
-
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: u, password: p})
-            });
-            const data = await res.json();
-            
-            if(data.token) {
-                token = data.token;
-                document.getElementById('user-email-display').innerText = data.email;
-                document.getElementById('auth-view').style.display = 'none';
-                document.getElementById('app-view').style.display = 'flex';
-                loadEmails();
-            } else { alert(data.error || data.message); }
+        async function auth(url) {
+            const u = document.getElementById('user').value;
+            const p = document.getElementById('pass').value;
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username: u, password: p})
+                });
+                const data = await res.json();
+                if(data.token) {
+                    token = data.token;
+                    document.getElementById('my-email').innerText = data.email;
+                    document.getElementById('auth-screen').style.display = 'none';
+                    document.getElementById('app-screen').style.display = 'flex';
+                    loadEmails();
+                } else { alert(data.error || "Hiba történt"); }
+            } catch(e) { alert("Szerver hiba!"); }
         }
 
         async function loadEmails() {
-            const res = await fetch('/api/inbox', { headers: {'Authorization': token} });
-            const emails = await res.json();
-            const list = document.getElementById('email-list');
-            list.innerHTML = emails.length ? "" : "<p style='padding:20px; color:#5f6368'>A postaláda üres.</p>";
-            emails.forEach(e => {
-                list.innerHTML += `
-                    <div class="email-item">
-                        <span class="material-icons" style="color:#c4c7c5; margin-right:15px; font-size:20px">star_outline</span>
-                        <div class="sender">${e.from.split('<')[0]}</div>
-                        <div class="subject"><b>${e.subject}</b> - <span>${e.body.substring(0, 60)}...</span></div>
-                    </div>`;
-            });
-        }
+            const listDiv = document.getElementById('list');
+            listDiv.innerHTML = "<p style='padding:20px'>Frissítés...</p>";
+            
+            try {
+                const res = await fetch('/api/inbox', { headers: {'Authorization': token} });
+                if(!res.ok) throw new Error("Sikertelen lekérés");
+                
+                const emails = await res.json();
+                if(emails.length === 0) {
+                    listDiv.innerHTML = "<p style='padding:20px; color:#666'>A postaláda üres.</p>";
+                    return;
+                }
 
-        async function sendEmail() {
-            const res = await fetch('/api/send', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'Authorization': token},
-                body: JSON.stringify({
-                    to: document.getElementById('to').value,
-                    subject: document.getElementById('subject').value,
-                    body: document.getElementById('body').value
-                })
-            });
-            const d = await res.json();
-            alert(d.message || d.error);
-            closeModal();
+                listDiv.innerHTML = "";
+                emails.forEach(e => {
+                    listDiv.innerHTML += `
+                        <div class="email-item">
+                            <span class="material-icons" style="color:#ccc; margin-right:15px">star_outline</span>
+                            <div class="sender">${e.from}</div>
+                            <div class="subject"><b>${e.subject}</b> - ${e.body.substring(0, 50)}...</div>
+                        </div>`;
+                });
+            } catch(err) {
+                listDiv.innerHTML = `<p style='padding:20px; color:red'>Hiba: ${err.message}</p>`;
+            }
         }
-
-        function openModal() { document.getElementById('compose-modal').style.display = 'block'; }
-        function closeModal() { document.getElementById('compose-modal').style.display = 'none'; }
     </script>
 </body>
 </html>
