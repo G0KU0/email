@@ -8,7 +8,9 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 app.use(cors());
-app.use(express.static('public'));
+
+// EZ JAVÍTJA A "CANNOT GET /" HIBÁT:
+app.use(express.static('public')); 
 
 // --- ADATBÁZIS MODELLEK ---
 const User = mongoose.model('User', new mongoose.Schema({
@@ -25,19 +27,20 @@ const Email = mongoose.model('Email', new mongoose.Schema({
     receivedAt: { type: Date, default: Date.now }
 }));
 
+// MongoDB csatlakozás
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("Adatbázis aktív!"))
-    .catch(err => console.error("DB Hiba:", err));
+    .then(() => console.log("Adatbázis csatlakozva!"))
+    .catch(err => console.error("MongoDB hiba:", err));
 
 // --- ÚTVONALAK ---
 
-// Regisztráció - Itt rakjuk össze a @-os címet
+// Regisztráció - JAVÍTOTT KUKAC JEL:
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        // ITT TÖRTÉNIK A VARÁZSLAT: felhasználó + @ + domain
+        // Itt adjuk hozzá a @ jelet automatikusan
         const teljesEmail = `${username}@${process.env.DOMAIN_NAME}`;
 
         const newUser = new User({
@@ -47,9 +50,9 @@ app.post('/api/register', async (req, res) => {
         });
 
         await newUser.save();
-        res.status(201).json({ message: `Sikeres! Az új címed: ${teljesEmail}` });
+        res.status(201).json({ message: "Sikeres regisztráció!", email: teljesEmail });
     } catch (e) { 
-        res.status(400).json({ error: "Ez a név már foglalt!" }); 
+        res.status(400).json({ error: "Ez a felhasználónév már foglalt!" }); 
     }
 });
 
@@ -61,22 +64,23 @@ app.post('/api/login', async (req, res) => {
         const token = jwt.sign({ email: user.emailAddress }, process.env.JWT_SECRET);
         res.json({ token, email: user.emailAddress });
     } else { 
-        res.status(401).json({ error: "Hibás felhasználónév vagy jelszó!" }); 
+        res.status(401).json({ error: "Hibás adatok!" }); 
     }
 });
 
-// Webhook a bejövő leveleknek
+// WEBHOOK (Ide küldi a levelet a postás/továbbító)
 app.post('/api/webhook/incoming', async (req, res) => {
     const { from, to, subject, body } = req.body;
     const newEmail = new Email({ from, to, subject, body });
     await newEmail.save();
+    console.log(`Új levél érkezett: ${to}`);
     res.status(200).send("OK");
 });
 
-// Levelek lekérése
+// Inbox lekérése
 app.get('/api/inbox', async (req, res) => {
     const token = req.headers['authorization'];
-    if (!token) return res.status(401).send("Nincs token");
+    if (!token) return res.status(401).send("Nincs belépve");
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const emails = await Email.find({ to: decoded.email }).sort({ receivedAt: -1 });
@@ -87,4 +91,4 @@ app.get('/api/inbox', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Szerver elindult!`));
+app.listen(PORT, () => console.log(`Szerver fut a ${PORT} porton!`));
